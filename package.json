@@ -1,0 +1,19 @@
+{
+  "name": "transcript-player",
+  "version": "1.0.0",
+  "description": "A custom HTMLElement that adds a scrollable transcript player to video and audio files.",
+  "main": "transcript-player.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/jasonford/transcript-player.git"
+  },
+  "author": "Jason Ford",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jasonford/transcript-player/issues"
+  },
+  "homepage": "https://github.com/jasonford/transcript-player#readme"
+}
