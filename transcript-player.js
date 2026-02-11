@@ -286,6 +286,14 @@ class TranscriptPlayer extends HTMLElement {
     this._indTop?.removeEventListener('click', this._onIndicatorClick)
     this._indBottom?.removeEventListener('click', this._onIndicatorClick)
 
+    // hard stop media
+    const v = this.videoEl
+    if (v) {
+      try { v.pause() } catch {}
+      v.removeAttribute('src')
+      v.load?.()
+    }
+
     this._scroller.cancel()
   }
 
