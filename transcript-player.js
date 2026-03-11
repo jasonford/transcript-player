@@ -764,4 +764,9 @@ class TranscriptPlayer extends HTMLElement {
   }
 }
 
-customElements.define('transcript-player', TranscriptPlayer)
+if (!customElements.get('transcript-player')) {
+  customElements.define('transcript-player', TranscriptPlayer)
+}
+
+export { TranscriptPlayer }
+export { VueTranscriptPlayer } from './transcript-player-vue.js'

@@ -61,6 +61,26 @@ export default defineConfig({
 
 ```
 
+You can also use the Vue wrapper export instead of rendering the custom
+element directly:
+
+```js
+import { VueTranscriptPlayer } from 'transcript-player'
+```
+
+```vue
+<script setup>
+import { VueTranscriptPlayer } from 'transcript-player'
+</script>
+
+<template>
+  <VueTranscriptPlayer
+    video-src="/media/example.mp4"
+    srt-url="/captions/example.srt"
+  />
+</template>
+```
+
 ---
 
 ## Attributes
