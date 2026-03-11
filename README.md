@@ -3,8 +3,10 @@
 A tiny Web Component that plays a video and renders an interactive transcript from an SRT file.
 
 - Highlights the current word as the video plays  
+- Marks all earlier words with a `before` class for distinct styling  
 - Click any word to seek to that time (click the current word to toggle play/pause)  
 - Auto-scrolls to keep the current word in view, with “Jump to current” indicators when you scroll away  
+- Inserts a timestamp between transcript blocks  
 - Optional `start-text` to jump to the first occurrence of some text in the transcript  
 
 ---
@@ -138,5 +140,6 @@ transcript-player::part(scroll) {
 - SRT files are loaded via `fetch()` (CORS rules apply).
 - Active cue detection uses a linear scan over cues.
 - Each word tooltip shows its start time as a formatted timecode.
+- Timestamps are rendered between sentence blocks using the next block's start time.
 
 ---

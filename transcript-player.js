@@ -113,6 +113,14 @@ class TranscriptPlayer extends HTMLElement {
           white-space: pre-wrap;
         }
 
+        .timestamp {
+          margin: 10px 8px 0;
+          font-size: 12px;
+          line-height: 1.2;
+          opacity: 0.65;
+          user-select: none;
+        }
+
         .sentence.active {
           background: rgba(0, 0, 0, 0.04);
         }
@@ -122,6 +130,7 @@ class TranscriptPlayer extends HTMLElement {
           cursor: pointer;
         }
         .w.inactive { opacity: 0.8; }
+        .w.before { opacity: 0.55; }
         .w.current {
           opacity: 1;
           font-weight: inherit;
@@ -686,6 +695,12 @@ class TranscriptPlayer extends HTMLElement {
 
   // ---- Rendering ----
 
+  _wordClassName(cueIdx, followCueIdx) {
+    if (cueIdx === followCueIdx) return 'w current'
+    if (followCueIdx >= 0 && cueIdx < followCueIdx) return 'w before'
+    return 'w inactive'
+  }
+
   _render() {
     const ce = this._captionsEl
     if (!ce) return
@@ -698,6 +713,14 @@ class TranscriptPlayer extends HTMLElement {
 
     for (let si = 0; si < this._sentences.length; si++) {
       const s = this._sentences[si]
+
+      if (si > 0) {
+        const timestamp = document.createElement('div')
+        timestamp.className = 'timestamp'
+        timestamp.textContent = formatSecondsToTimecode(s.start)
+        ce.appendChild(timestamp)
+      }
+
       const div = document.createElement('div')
       div.className = 'sentence' + (si === this._activeSentenceIndex ? ' active' : '')
       div.dataset.sentenceIndex = String(si)
@@ -705,7 +728,7 @@ class TranscriptPlayer extends HTMLElement {
       for (let wi = 0; wi < s.words.length; wi++) {
         const w = s.words[wi]
         const span = document.createElement('span')
-        span.className = 'w ' + (w.cueIndex === followCueIdx ? 'current' : 'inactive')
+        span.className = this._wordClassName(w.cueIndex, followCueIdx)
         span.textContent = w.text + (wi !== s.words.length - 1 ? ' ' : '')
         span.title = formatSecondsToTimecode(w.start)
 
@@ -719,21 +742,22 @@ class TranscriptPlayer extends HTMLElement {
   }
 
   _updateWordClasses() {
-    const si = this._activeSentenceIndex
-    if (si < 0) return
-    const el = this._sentenceEls[si]
-    if (!el) return
-
     const followCueIdx = this._getFollowCueIndex()
-    const spans = el.querySelectorAll('span.w')
-    const sentence = this._sentences[si]
+    for (let si = 0; si < this._sentenceEls.length; si++) {
+      const el = this._sentenceEls[si]
+      const sentence = this._sentences[si]
+      if (!el || !sentence) continue
 
-    for (let i = 0; i < spans.length; i++) {
-      const cueIdx = sentence.words[i]?.cueIndex
-      spans[i].className = 'w ' + (cueIdx === followCueIdx ? 'current' : 'inactive')
+      el.className = 'sentence' + (si === this._activeSentenceIndex ? ' active' : '')
 
-      const w = sentence.words[i]
-      if (w) spans[i].title = formatSecondsToTimecode(w.start)
+      const spans = el.querySelectorAll('span.w')
+      for (let i = 0; i < spans.length; i++) {
+        const cueIdx = sentence.words[i]?.cueIndex
+        spans[i].className = this._wordClassName(cueIdx, followCueIdx)
+
+        const w = sentence.words[i]
+        if (w) spans[i].title = formatSecondsToTimecode(w.start)
+      }
     }
 
     this._updateFollowIndicators()
