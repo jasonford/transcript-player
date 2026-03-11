@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcript Player Test</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #f4efe7;
+      color: #1f1a17;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(150, 108, 76, 0.18), transparent 35%),
+        linear-gradient(180deg, #f8f4ee 0%, #efe6da 100%);
+    }
+
+    main {
+      width: min(960px, calc(100vw - 32px));
+      margin: 32px auto;
+      padding: 24px;
+      border: 1px solid rgba(58, 43, 32, 0.12);
+      border-radius: 18px;
+      background: rgba(255, 251, 246, 0.88);
+      box-shadow: 0 18px 50px rgba(73, 52, 38, 0.12);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+
+    p {
+      margin: 0 0 20px;
+      font-size: 1rem;
+      line-height: 1.5;
+      color: rgba(31, 26, 23, 0.78);
+    }
+
+    transcript-player {
+      display: block;
+      height: min(80vh, 920px);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Transcript Player Test</h1>
+    <p>
+      Local demo using <code>sintel_trailer-480p.mp4</code> and
+      <code>sintel_trailer-480p.oneword.srt</code>.
+    </p>
+
+    <transcript-player
+      video-src="./sintel_trailer-480p.mp4"
+      srt-url="./sintel_trailer-480p.oneword.srt"
+      controls
+      playsinline
+      preload="metadata"
+      scroll-behavior="smooth"
+    ></transcript-player>
+  </main>
+
+  <script type="module" src="./transcript-player.js"></script>
+</body>
+</html>
