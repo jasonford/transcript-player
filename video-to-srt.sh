@@ -121,6 +121,7 @@ FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_NO_CACHE_DIR=1
 ENV PYTHONUNBUFFERED=1
+ENV TRANSFORMERS_NO_TORCHVISION=1
 
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -137,7 +138,7 @@ RUN pip3 install --index-url https://download.pytorch.org/whl/cu121 \
 
 RUN pip3 install whisperx
 
-RUN pip3 uninstall -y torchvision || true
+RUN pip3 uninstall -y torchvision torchcodec || true
 
 WORKDIR /work
 ENTRYPOINT ["whisperx"]
@@ -165,7 +166,6 @@ DOCKER_ARGS=(
   -e MPLCONFIGDIR=/tmp/matplotlib
   -e NUMBA_CACHE_DIR=/tmp/numba
   -e PYTHONUNBUFFERED=1
-  -e PYTHONWARNINGS=ignore::ResourceWarning
   -e TRANSFORMERS_NO_TORCHVISION=1
 )
 
