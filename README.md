@@ -77,6 +77,7 @@ import { VueTranscriptPlayer } from 'transcript-player'
   <VueTranscriptPlayer
     video-src="/media/example.mp4"
     srt-url="/captions/example.srt"
+    disable-download
   />
 </template>
 ```
@@ -119,6 +120,7 @@ These map directly to the internal `<video>` element:
 - `video-src` → `video.src`
 - `poster`
 - `controls` (boolean, default: on)
+- `disable-download` (boolean, default: off)
 - `muted`
 - `loop`
 - `playsinline` (boolean, default: on)
@@ -126,6 +128,10 @@ These map directly to the internal `<video>` element:
 
 Boolean attributes follow normal HTML rules:  
 present = enabled, absent = disabled.
+
+When `disable-download` is present, the component asks the browser to hide download
+from built-in video controls where supported and blocks right-click on the video
+element. This is a UI restriction only, not DRM.
 
 ---
 

@@ -17,6 +17,7 @@ class TranscriptPlayer extends HTMLElement {
       'video-src',
       'poster',
       'controls',
+      'disable-download',
       'muted',
       'loop',
       'playsinline',
@@ -57,6 +58,7 @@ class TranscriptPlayer extends HTMLElement {
     this._scroller = createScroller()
 
     this._onTimeUpdate = this._onTimeUpdate.bind(this)
+    this._onVideoContextMenu = this._onVideoContextMenu.bind(this)
     this._onCaptionsClick = this._onCaptionsClick.bind(this)
     this._onScroll = this._onScroll.bind(this)
     this._onUserScrollIntent = this._onUserScrollIntent.bind(this)
@@ -254,6 +256,13 @@ class TranscriptPlayer extends HTMLElement {
     else this.setAttribute('video-src', String(v))
   }
 
+  get disableDownload() {
+    return this.hasAttribute('disable-download')
+  }
+  set disableDownload(v) {
+    this.toggleAttribute('disable-download', Boolean(v))
+  }
+
   // ---- Lifecycle ----
 
   connectedCallback() {
@@ -343,6 +352,7 @@ class TranscriptPlayer extends HTMLElement {
       name === 'video-src' ||
       name === 'poster' ||
       name === 'controls' ||
+      name === 'disable-download' ||
       name === 'muted' ||
       name === 'loop' ||
       name === 'playsinline' ||
@@ -377,6 +387,14 @@ class TranscriptPlayer extends HTMLElement {
     boolAttr('loop', false)
     boolAttr('playsinline', true)
 
+    if (this.disableDownload) {
+      v.setAttribute('controlslist', 'nodownload')
+      v.controlsList?.add?.('nodownload')
+    } else {
+      v.removeAttribute('controlslist')
+      v.controlsList?.remove?.('nodownload')
+    }
+
     const preload = this.getAttribute('preload')
     if (preload != null) v.setAttribute('preload', preload)
     else v.setAttribute('preload', 'metadata')
@@ -395,6 +413,7 @@ class TranscriptPlayer extends HTMLElement {
       this._boundVideo.addEventListener('timeupdate', this._onTimeUpdate, { passive: true })
       this._boundVideo.addEventListener('seeking', this._onTimeUpdate, { passive: true })
       this._boundVideo.addEventListener('loadedmetadata', this._onTimeUpdate, { passive: true })
+      this._boundVideo.addEventListener('contextmenu', this._onVideoContextMenu)
       this._startLoop()
     } else {
       this._stopLoop()
@@ -406,6 +425,7 @@ class TranscriptPlayer extends HTMLElement {
     this._boundVideo.removeEventListener('timeupdate', this._onTimeUpdate)
     this._boundVideo.removeEventListener('seeking', this._onTimeUpdate)
     this._boundVideo.removeEventListener('loadedmetadata', this._onTimeUpdate)
+    this._boundVideo.removeEventListener('contextmenu', this._onVideoContextMenu)
     this._boundVideo = null
   }
 
@@ -413,6 +433,11 @@ class TranscriptPlayer extends HTMLElement {
     const v = this.videoEl
     if (!v) return
     this._updateActiveFromTime(v.currentTime)
+  }
+
+  _onVideoContextMenu(event) {
+    if (!this.disableDownload) return
+    event.preventDefault()
   }
 
   _startLoop() {
