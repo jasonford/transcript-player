@@ -48,6 +48,33 @@
       color: rgba(31, 26, 23, 0.78);
     }
 
+    .demo-switcher {
+      display: inline-flex;
+      gap: 4px;
+      margin: 0 0 18px;
+      padding: 4px;
+      border: 1px solid rgba(58, 43, 32, 0.16);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .demo-switcher button {
+      appearance: none;
+      border: 0;
+      border-radius: 7px;
+      padding: 8px 12px;
+      background: transparent;
+      color: #35271f;
+      font: inherit;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .demo-switcher button[aria-pressed="true"] {
+      background: #35271f;
+      color: #fffaf3;
+    }
+
     transcript-player {
       display: block;
       height: min(80vh, 920px);
@@ -59,13 +86,19 @@
   <main>
     <h1>Transcript Player Test</h1>
     <p>
-      Local demo using <code>sintel_trailer-480p.mp4</code> and
-      <code>sintel_trailer-480p.oneword.srt</code>.
+      Switch between the local fixtures to test video, audio, and audio-only video playback.
     </p>
 
+    <div class="demo-switcher" aria-label="Demo media">
+      <button type="button" data-demo="video" aria-pressed="true">Video</button>
+      <button type="button" data-demo="audio" aria-pressed="false">Audio</button>
+      <button type="button" data-demo="video-audio" aria-pressed="false">Video As Audio</button>
+    </div>
+
     <transcript-player
-      video-src="./sintel_trailer-480p.mp4"
-      srt-url="./sintel_trailer-480p.oneword.srt"
+      id="player"
+      src="./sintel_trailer-480p.mp4"
+      transcript="./sintel_trailer-480p.oneword.srt"
       controls
       playsinline
       preload="metadata"
@@ -74,5 +107,48 @@
   </main>
 
   <script type="module" src="./transcript-player.js"></script>
+  <script>
+    const demos = {
+      video: {
+        src: './sintel_trailer-480p.mp4',
+        audioOnly: false,
+        transcript: './sintel_trailer-480p.oneword.srt'
+      },
+      audio: {
+        src: './demo-audio.wav',
+        audioOnly: false,
+        transcript: './demo-audio.oneword.srt'
+      },
+      'video-audio': {
+        src: './sintel_trailer-480p.mp4',
+        audioOnly: true,
+        transcript: './sintel_trailer-480p.oneword.srt'
+      }
+    }
+
+    const player = document.querySelector('#player')
+    const buttons = document.querySelectorAll('[data-demo]')
+
+    function setDemo(name) {
+      const demo = demos[name]
+      if (!player || !demo) return
+
+      player.removeAttribute('start-text')
+      player.removeAttribute('video-src')
+      player.removeAttribute('audio-src')
+      player.removeAttribute('srt-url')
+      player.toggleAttribute('audio-only', demo.audioOnly)
+      player.setAttribute('src', demo.src)
+      player.setAttribute('transcript', demo.transcript)
+
+      for (const button of buttons) {
+        button.setAttribute('aria-pressed', String(button.dataset.demo === name))
+      }
+    }
+
+    for (const button of buttons) {
+      button.addEventListener('click', () => setDemo(button.dataset.demo))
+    }
+  </script>
 </body>
 </html>

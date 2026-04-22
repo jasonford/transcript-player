@@ -10,11 +10,16 @@ import { createScroller, targetScrollTop } from './utils/scroll.js'
 class TranscriptPlayer extends HTMLElement {
   static get observedAttributes() {
     return [
+      'transcript',
       'srt-url',
+      'transcript-type',
       'sentence-gap-seconds',
       'scroll-behavior',
       'start-text',
+      'src',
       'video-src',
+      'audio-src',
+      'audio-only',
       'poster',
       'controls',
       'disable-download',
@@ -32,6 +37,7 @@ class TranscriptPlayer extends HTMLElement {
     this._abortCtrl = null
     this._rafId = 0
     this._boundVideo = null
+    this._pendingDetectionSrc = ''
 
     this._cues = []
     this._sentences = []
@@ -48,6 +54,8 @@ class TranscriptPlayer extends HTMLElement {
     this._wordElsByCue = new Map()
 
     this.videoEl = null
+    this.audioEl = null
+    this.mediaEl = null
 
     // autoscroll state
     this._autoScrollEnabled = true
@@ -58,6 +66,8 @@ class TranscriptPlayer extends HTMLElement {
     this._scroller = createScroller()
 
     this._onTimeUpdate = this._onTimeUpdate.bind(this)
+    this._onLoadedMetadata = this._onLoadedMetadata.bind(this)
+    this._onMediaError = this._onMediaError.bind(this)
     this._onVideoContextMenu = this._onVideoContextMenu.bind(this)
     this._onCaptionsClick = this._onCaptionsClick.bind(this)
     this._onScroll = this._onScroll.bind(this)
@@ -88,6 +98,70 @@ class TranscriptPlayer extends HTMLElement {
           background: #000;
           aspect-ratio: 16 / 9;
           max-height: 60vh;
+        }
+
+        audio {
+          display: none;
+        }
+
+        .root[data-media-kind="pending"] video,
+        .root[data-media-kind="pending"] audio {
+          display: none;
+        }
+
+        .root[data-media-kind="audio"] {
+          overflow: hidden;
+        }
+
+        .root[data-media-kind="audio-fallback"] {
+          overflow: hidden;
+        }
+
+        .root[data-media-kind="audio"] video {
+          display: none;
+        }
+
+        .root[data-media-kind="audio-fallback"] audio {
+          display: none;
+        }
+
+        .root[data-media-kind="audio"] audio {
+          display: block;
+          order: 2;
+          flex: 0 0 auto;
+          width: calc(100% - 32px);
+          margin: 12px 16px 16px;
+        }
+
+        .root[data-media-kind="audio-fallback"] video {
+          display: block;
+          order: 2;
+          flex: 0 0 auto;
+          width: calc(100% - 32px);
+          height: 54px;
+          margin: 12px 16px 16px;
+          aspect-ratio: auto;
+          background: transparent;
+        }
+
+        .root[data-media-kind="audio"] .captions-wrap {
+          order: 1;
+          min-height: 0;
+        }
+
+        .root[data-media-kind="audio-fallback"] .captions-wrap {
+          order: 1;
+          min-height: 0;
+        }
+
+        .root[data-media-kind="audio"] .captions-scroll-inner {
+          max-width: 760px;
+          padding: 24px clamp(18px, 8%, 72px) 18px;
+        }
+
+        .root[data-media-kind="audio-fallback"] .captions-scroll-inner {
+          max-width: 760px;
+          padding: 24px clamp(18px, 8%, 72px) 18px;
         }
 
         .captions-wrap {
@@ -185,6 +259,7 @@ class TranscriptPlayer extends HTMLElement {
 
       <div class="root">
         <video part="video"></video>
+        <audio part="audio"></audio>
 
         <div class="captions-wrap">
           <button class="follow-indicator top" data-pos="top" data-show="0" type="button">
@@ -209,6 +284,8 @@ class TranscriptPlayer extends HTMLElement {
     this._indTop = this.shadowRoot.querySelector('.follow-indicator.top')
     this._indBottom = this.shadowRoot.querySelector('.follow-indicator.bottom')
     this.videoEl = this.shadowRoot.querySelector('video')
+    this.audioEl = this.shadowRoot.querySelector('audio')
+    this.mediaEl = this.videoEl
   }
 
   // ---- Public API ----
@@ -219,6 +296,22 @@ class TranscriptPlayer extends HTMLElement {
   set srtUrl(v) {
     if (v == null) this.removeAttribute('srt-url')
     else this.setAttribute('srt-url', String(v))
+  }
+
+  get transcript() {
+    return this.getAttribute('transcript') || ''
+  }
+  set transcript(v) {
+    if (v == null) this.removeAttribute('transcript')
+    else this.setAttribute('transcript', String(v))
+  }
+
+  get transcriptType() {
+    return (this.getAttribute('transcript-type') || '').toLowerCase()
+  }
+  set transcriptType(v) {
+    if (v == null) this.removeAttribute('transcript-type')
+    else this.setAttribute('transcript-type', String(v))
   }
 
   get sentenceGapSeconds() {
@@ -256,6 +349,29 @@ class TranscriptPlayer extends HTMLElement {
     else this.setAttribute('video-src', String(v))
   }
 
+  get src() {
+    return this.getAttribute('src') || ''
+  }
+  set src(v) {
+    if (v == null) this.removeAttribute('src')
+    else this.setAttribute('src', String(v))
+  }
+
+  get audioSrc() {
+    return this.getAttribute('audio-src') || ''
+  }
+  set audioSrc(v) {
+    if (v == null) this.removeAttribute('audio-src')
+    else this.setAttribute('audio-src', String(v))
+  }
+
+  get audioOnly() {
+    return this.hasAttribute('audio-only')
+  }
+  set audioOnly(v) {
+    this.toggleAttribute('audio-only', Boolean(v))
+  }
+
   get disableDownload() {
     return this.hasAttribute('disable-download')
   }
@@ -269,7 +385,7 @@ class TranscriptPlayer extends HTMLElement {
     this._applyVideoAttributes()
     this._bindVideo()
 
-    this._loadSrt(this.srtUrl).catch(() => this._reset())
+    this._loadTranscript(this._transcriptSrc()).catch(() => this._reset())
 
     this._captionsEl?.addEventListener('click', this._onCaptionsClick)
 
@@ -284,7 +400,7 @@ class TranscriptPlayer extends HTMLElement {
     this._indTop?.addEventListener('click', this._onIndicatorClick)
     this._indBottom?.addEventListener('click', this._onIndicatorClick)
 
-    const v = this.videoEl
+    const v = this.mediaEl
     if (v) this._updateActiveFromTime(v.currentTime || 0)
   }
 
@@ -305,11 +421,16 @@ class TranscriptPlayer extends HTMLElement {
     this._indBottom?.removeEventListener('click', this._onIndicatorClick)
 
     // hard stop media
-    const v = this.videoEl
+    const v = this.mediaEl
     if (v) {
       try { v.pause() } catch {}
       v.removeAttribute('src')
       v.load?.()
+    }
+    for (const media of [this.videoEl, this.audioEl]) {
+      if (!media || media === v) continue
+      media.removeAttribute('src')
+      media.load?.()
     }
 
     this._scroller.cancel()
@@ -318,10 +439,10 @@ class TranscriptPlayer extends HTMLElement {
   attributeChangedCallback(name, oldValue, newValue) {
     if (oldValue === newValue) return
 
-    if (name === 'srt-url') {
-      this._loadSrt(this.srtUrl)
+    if (name === 'transcript' || name === 'srt-url' || name === 'transcript-type') {
+      this._loadTranscript(this._transcriptSrc())
         .then(() => {
-          const v = this.videoEl
+          const v = this.mediaEl
           if (v) this._updateActiveFromTime(v.currentTime || 0)
         })
         .catch(() => this._reset())
@@ -350,6 +471,9 @@ class TranscriptPlayer extends HTMLElement {
 
     if (
       name === 'video-src' ||
+      name === 'src' ||
+      name === 'audio-src' ||
+      name === 'audio-only' ||
       name === 'poster' ||
       name === 'controls' ||
       name === 'disable-download' ||
@@ -359,23 +483,105 @@ class TranscriptPlayer extends HTMLElement {
       name === 'preload'
     ) {
       this._applyVideoAttributes()
-      const v = this.videoEl
+      this._bindVideo()
+      const v = this.mediaEl
       if (v) this._updateActiveFromTime(v.currentTime || 0)
     }
   }
 
   _applyVideoAttributes() {
-    const v = this.videoEl
+    const root = this.shadowRoot.querySelector('.root')
+    const src = this._mediaSrc()
+    const kind = this._mediaKind(src)
+    const v = kind === 'audio' ? this.audioEl : this.videoEl
+    const inactive = kind === 'audio' ? this.videoEl : this.audioEl
     if (!v) return
 
-    const src = this.videoSrc
+    this.mediaEl = v
+    if (root) root.dataset.mediaKind = kind
+
     if (src) v.src = src
     else v.removeAttribute('src')
 
-    const poster = this.getAttribute('poster')
-    if (poster != null) v.setAttribute('poster', poster)
-    else v.removeAttribute('poster')
+    this._pendingDetectionSrc = kind === 'pending' ? src : ''
 
+    if (inactive) {
+      inactive.removeAttribute('src')
+      inactive.load?.()
+    }
+
+    const poster = this.getAttribute('poster')
+    if (this.videoEl) {
+      if (poster != null && kind !== 'audio') this.videoEl.setAttribute('poster', poster)
+      else this.videoEl.removeAttribute('poster')
+    }
+
+    this._applyPassthroughAttributes(v, kind)
+  }
+
+  _mediaSrc() {
+    return this.src || this.audioSrc || this.videoSrc
+  }
+
+  _mediaKind(src = this._mediaSrc()) {
+    if (!src) return 'video'
+    if (this.audioOnly || (this.audioSrc && !this.src)) return 'audio'
+    if (this._looksLikeAudioSrc(src)) return 'audio'
+    if (this._looksLikeVideoSrc(src)) return 'video'
+    return 'pending'
+  }
+
+  _looksLikeAudioSrc(src) {
+    const path = String(src || '').split(/[?#]/, 1)[0].toLowerCase()
+    return /\.(mp3|m4a|aac|wav|flac|ogg|oga|opus|aif|aiff|wma)$/.test(path)
+  }
+
+  _looksLikeVideoSrc(src) {
+    const path = String(src || '').split(/[?#]/, 1)[0].toLowerCase()
+    return /\.(mp4|m4v|mov|webm|ogv|avi|mkv)$/.test(path)
+  }
+
+  _setMediaKind(kind) {
+    const root = this.shadowRoot.querySelector('.root')
+    if (root) root.dataset.mediaKind = kind
+  }
+
+  _switchMediaElement(kind, src = this._mediaSrc(), displayKind = kind) {
+    const next = kind === 'audio' ? this.audioEl : this.videoEl
+    const prev = this.mediaEl
+    if (!next || next === prev) {
+      this._setMediaKind(displayKind)
+      return
+    }
+
+    const wasPaused = !prev || prev.paused
+    const currentTime = prev?.currentTime || 0
+
+    try { prev?.pause() } catch {}
+    prev?.removeAttribute('src')
+    prev?.load?.()
+
+    this.mediaEl = next
+    this._setMediaKind(displayKind)
+    if (src) next.src = src
+    else next.removeAttribute('src')
+    this._applyPassthroughAttributes(next, displayKind)
+    this._bindVideo()
+
+    const applyTime = () => {
+      if (Number.isFinite(currentTime) && currentTime > 0) next.currentTime = currentTime
+      this._updateActiveFromTime(next.currentTime || currentTime || 0)
+      if (!wasPaused) {
+        const p = next.play()
+        if (p && typeof p.catch === 'function') p.catch(() => {})
+      }
+    }
+
+    if (Number.isFinite(next.duration) && next.duration > 0) applyTime()
+    else next.addEventListener('loadedmetadata', applyTime, { once: true, passive: true })
+  }
+
+  _applyPassthroughAttributes(v, kind) {
     const boolAttr = (attr, onByDefault = false) => {
       const has = this.hasAttribute(attr)
       if (has || onByDefault) v.toggleAttribute(attr, has || onByDefault)
@@ -385,7 +591,8 @@ class TranscriptPlayer extends HTMLElement {
     boolAttr('controls', true)
     boolAttr('muted', false)
     boolAttr('loop', false)
-    boolAttr('playsinline', true)
+    if (kind !== 'audio' && kind !== 'audio-fallback') boolAttr('playsinline', true)
+    else v.removeAttribute('playsinline')
 
     if (this.disableDownload) {
       v.setAttribute('controlslist', 'nodownload')
@@ -403,7 +610,7 @@ class TranscriptPlayer extends HTMLElement {
   // ---- Video binding ----
 
   _bindVideo() {
-    const v = this.videoEl
+    const v = this.mediaEl
     if (v === this._boundVideo) return
 
     this._unbindVideo()
@@ -412,7 +619,8 @@ class TranscriptPlayer extends HTMLElement {
     if (this._boundVideo) {
       this._boundVideo.addEventListener('timeupdate', this._onTimeUpdate, { passive: true })
       this._boundVideo.addEventListener('seeking', this._onTimeUpdate, { passive: true })
-      this._boundVideo.addEventListener('loadedmetadata', this._onTimeUpdate, { passive: true })
+      this._boundVideo.addEventListener('loadedmetadata', this._onLoadedMetadata, { passive: true })
+      this._boundVideo.addEventListener('error', this._onMediaError)
       this._boundVideo.addEventListener('contextmenu', this._onVideoContextMenu)
       this._startLoop()
     } else {
@@ -424,15 +632,50 @@ class TranscriptPlayer extends HTMLElement {
     if (!this._boundVideo) return
     this._boundVideo.removeEventListener('timeupdate', this._onTimeUpdate)
     this._boundVideo.removeEventListener('seeking', this._onTimeUpdate)
-    this._boundVideo.removeEventListener('loadedmetadata', this._onTimeUpdate)
+    this._boundVideo.removeEventListener('loadedmetadata', this._onLoadedMetadata)
+    this._boundVideo.removeEventListener('error', this._onMediaError)
     this._boundVideo.removeEventListener('contextmenu', this._onVideoContextMenu)
     this._boundVideo = null
   }
 
   _onTimeUpdate() {
-    const v = this.videoEl
+    const v = this.mediaEl
     if (!v) return
     this._updateActiveFromTime(v.currentTime)
+  }
+
+  _onLoadedMetadata() {
+    const v = this.mediaEl
+    if (!v) return
+
+    const src = this._mediaSrc()
+    if (
+      v === this.videoEl &&
+      !this.audioOnly &&
+      !(this.audioSrc && !this.src)
+    ) {
+      const hasVideo = v.videoWidth > 0 && v.videoHeight > 0
+      this._pendingDetectionSrc = ''
+      if (!hasVideo) {
+        this._switchMediaElement('audio', src)
+        return
+      }
+      this._setMediaKind('video')
+    }
+
+    this._updateActiveFromTime(v.currentTime || 0)
+  }
+
+  _onMediaError() {
+    const src = this._mediaSrc()
+    if (
+      this.mediaEl === this.audioEl &&
+      this.audioOnly &&
+      src &&
+      !this._looksLikeAudioSrc(src)
+    ) {
+      this._switchMediaElement('video', src, 'audio-fallback')
+    }
   }
 
   _onVideoContextMenu(event) {
@@ -443,7 +686,7 @@ class TranscriptPlayer extends HTMLElement {
   _startLoop() {
     this._stopLoop()
     const tick = () => {
-      const v = this.videoEl
+      const v = this.mediaEl
       if (v && typeof v.currentTime === 'number') this._updateActiveFromTime(v.currentTime)
       this._rafId = requestAnimationFrame(tick)
     }
@@ -533,7 +776,7 @@ class TranscriptPlayer extends HTMLElement {
     if (cueIdx < 0) return
 
     const followCueIdx = this._getFollowCueIndex()
-    const v = this.videoEl
+    const v = this.mediaEl
 
     // toggle play/pause if active word clicked
     if (cueIdx === followCueIdx && v) {
@@ -557,7 +800,7 @@ class TranscriptPlayer extends HTMLElement {
   }
 
   _seekToCue(cueIdx) {
-    const v = this.videoEl
+    const v = this.mediaEl
     const cue = this._cues[cueIdx]
     if (!v || !cue) return
 
@@ -594,9 +837,13 @@ class TranscriptPlayer extends HTMLElement {
     this._seekToCue(cueIdx)
   }
 
-  // ---- SRT loading ----
+  // ---- Transcript loading ----
 
-  async _loadSrt(url) {
+  _transcriptSrc() {
+    return this.transcript || this.srtUrl
+  }
+
+  async _loadTranscript(url) {
     if (!url) {
       this._reset()
       return
@@ -606,10 +853,12 @@ class TranscriptPlayer extends HTMLElement {
     this._abortCtrl = new AbortController()
 
     const res = await fetch(url, { signal: this._abortCtrl.signal })
-    if (!res.ok) throw new Error(`Failed to fetch SRT: ${res.status}`)
+    if (!res.ok) throw new Error(`Failed to fetch transcript: ${res.status}`)
     const txt = await res.text()
+    const type = this._detectTranscriptType(url, res.headers.get('content-type'), txt)
+    const cues = this._parseTranscript(txt, type)
 
-    this._cues = parseSrtToCues(txt)
+    this._cues = cues
     this._sentences = buildSentencesFromWordCues(this._cues, this.sentenceGapSeconds)
 
     this._activeCueIndex = -1
@@ -621,6 +870,89 @@ class TranscriptPlayer extends HTMLElement {
 
     // apply start-text after we have cues rendered
     this._maybeStartFromText()
+  }
+
+  _detectTranscriptType(url, contentType, text) {
+    const declared = this.transcriptType
+    if (declared) return declared
+
+    const ct = String(contentType || '').toLowerCase()
+    if (ct.includes('json')) return 'json'
+    if (ct.includes('srt') || ct.includes('subrip')) return 'srt'
+    if (ct.includes('vtt')) return 'vtt'
+
+    const path = String(url || '').split(/[?#]/, 1)[0].toLowerCase()
+    if (path.endsWith('.json')) return 'json'
+    if (path.endsWith('.srt')) return 'srt'
+    if (path.endsWith('.vtt')) return 'vtt'
+
+    const trimmed = String(text || '').trimStart()
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json'
+    if (trimmed.startsWith('WEBVTT')) return 'vtt'
+    if (/^\d+\s*\n\d{2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->/m.test(trimmed)) return 'srt'
+    if (/\d{2}:\d{2}:\d{2}[,.]\d{1,3}\s*-->/m.test(trimmed)) return 'srt'
+
+    return 'srt'
+  }
+
+  _parseTranscript(text, type) {
+    if (type === 'srt') return parseSrtToCues(text)
+    if (type === 'vtt') return this._parseVttToCues(text)
+    if (type === 'json') return this._parseJsonTranscript(text)
+    throw new Error(`Unsupported transcript type: ${type}`)
+  }
+
+  _parseVttToCues(text) {
+    const srtLike = String(text || '')
+      .replace(/\r/g, '')
+      .replace(/^WEBVTT[^\n]*(\n|$)/, '')
+      .replace(/^\s*(NOTE|STYLE|REGION)[\s\S]*?(?=\n\s*\n|$)/gm, '')
+      .trim()
+
+    return parseSrtToCues(srtLike)
+  }
+
+  _parseJsonTranscript(text) {
+    const data = JSON.parse(text)
+    const candidates = []
+
+    if (Array.isArray(data)) candidates.push(data)
+    if (Array.isArray(data?.word_segments)) candidates.push(data.word_segments)
+    if (Array.isArray(data?.words)) candidates.push(data.words)
+    if (Array.isArray(data?.segments)) {
+      const segmentWords = []
+      for (const segment of data.segments) {
+        if (Array.isArray(segment?.words)) segmentWords.push(...segment.words)
+      }
+      if (segmentWords.length) candidates.push(segmentWords)
+      candidates.push(data.segments)
+    }
+
+    for (const candidate of candidates) {
+      const cues = this._jsonItemsToCues(candidate)
+      if (cues.length) return cues
+    }
+
+    return []
+  }
+
+  _jsonItemsToCues(items) {
+    const cues = []
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue
+
+      const start = Number(item.start ?? item.start_time ?? item.startTime)
+      const end = Number(item.end ?? item.end_time ?? item.endTime)
+      const text = String(item.word ?? item.text ?? item.caption ?? '').replace(/\s+/g, ' ').trim()
+
+      if (!Number.isFinite(start) || !Number.isFinite(end) || !text) continue
+      cues.push({ cueIndex: cues.length, start, end, text })
+    }
+
+    cues.sort((a, b) => a.start - b.start)
+    for (let i = 0; i < cues.length; i++) cues[i].cueIndex = i
+    return cues
   }
 
   _reset() {

@@ -1,8 +1,8 @@
 # `<transcript-player>`
 
-A tiny Web Component that plays a video and renders an interactive transcript from an SRT file.
+A tiny Web Component that plays video or audio and renders an interactive transcript file.
 
-- Highlights the current word as the video plays  
+- Highlights the current word as the media plays  
 - Marks all earlier words with a `before` class for distinct styling  
 - Click any word to seek to that time (click the current word to toggle play/pause)  
 - Auto-scrolls to keep the current word in view, with “Jump to current” indicators when you scroll away  
@@ -31,8 +31,27 @@ Then use it in HTML:
 
 ```html
 <transcript-player
-  video-src="/media/example.mp4"
-  srt-url="/captions/example.srt"
+  src="/media/example.mp4"
+  transcript="/captions/example.srt"
+></transcript-player>
+```
+
+The same `src` attribute works for audio files:
+
+```html
+<transcript-player
+  src="/media/example.mp3"
+  transcript="/captions/example.srt"
+></transcript-player>
+```
+
+To play only the audio track from a video file, add `audio-only`:
+
+```html
+<transcript-player
+  src="/media/interview.mp4"
+  transcript="/captions/interview.srt"
+  audio-only
 ></transcript-player>
 ```
 
@@ -75,8 +94,8 @@ import { VueTranscriptPlayer } from 'transcript-player'
 
 <template>
   <VueTranscriptPlayer
-    video-src="/media/example.mp4"
-    srt-url="/captions/example.srt"
+    src="/media/example.mp4"
+    transcript="/captions/example.srt"
     disable-download
   />
 </template>
@@ -88,10 +107,22 @@ import { VueTranscriptPlayer } from 'transcript-player'
 
 ### Transcript / Behavior
 
+#### `transcript` (string)
+
+URL to a transcript file.
+When changed, the transcript reloads.
+
+Supported transcript formats are detected in layers: explicit `transcript-type`,
+response `Content-Type`, file extension, then file contents. SRT, WebVTT, and
+WhisperX-style JSON transcripts are supported.
+
+#### `transcript-type` (`srt` | `vtt` | `json`)
+
+Optional explicit transcript type override.
+
 #### `srt-url` (string)
 
-URL to an `.srt` file.  
-When changed, the transcript reloads.
+Deprecated alias for `transcript`. It remains supported for compatibility.
 
 #### `sentence-gap-seconds` (number, default: `0.6`)
 
@@ -113,11 +144,14 @@ Changing the attribute triggers a new seek.
 
 ---
 
-### Video Attributes (Passthrough)
+### Media Attributes (Passthrough)
 
-These map directly to the internal `<video>` element:
+These map to the active internal media element:
 
+- `src` → canonical media source for video or audio
 - `video-src` → `video.src`
+- `audio-src` → `audio.src`
+- `audio-only` (boolean, default: off) → use audio-style controls and layout, even for video sources
 - `poster`
 - `controls` (boolean, default: on)
 - `disable-download` (boolean, default: off)
@@ -126,12 +160,16 @@ These map directly to the internal `<video>` element:
 - `playsinline` (boolean, default: on)
 - `preload` (default: `metadata`)
 
+`video-src` and `audio-src` remain supported for compatibility, but `src` is the
+recommended API. When `src` is used, the component uses media metadata where
+needed to distinguish video from audio. `audio-only` overrides detection.
+
 Boolean attributes follow normal HTML rules:  
 present = enabled, absent = disabled.
 
 When `disable-download` is present, the component asks the browser to hide download
-from built-in video controls where supported and blocks right-click on the video
-element. This is a UI restriction only, not DRM.
+from built-in media controls where supported and blocks right-click on the active
+media element. This is a UI restriction only, not DRM.
 
 ---
 
@@ -146,9 +184,10 @@ element. This is a UI restriction only, not DRM.
 
 ## Styling
 
-The component uses Shadow DOM. Two parts are exposed:
+The component uses Shadow DOM. Three parts are exposed:
 
 - `part="video"`
+- `part="audio"`
 - `part="scroll"`
 
 Example:
@@ -163,7 +202,7 @@ transcript-player::part(scroll) {
 
 ## Notes
 
-- SRT files are loaded via `fetch()` (CORS rules apply).
+- Transcript files are loaded via `fetch()` (CORS rules apply).
 - Active cue detection uses a linear scan over cues.
 - Each word tooltip shows its start time as a formatted timecode.
 - Timestamps are rendered between sentence blocks using the next block's start time.
