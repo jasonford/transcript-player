@@ -1,6 +1,6 @@
 {
   "name": "transcript-player",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A custom HTMLElement that adds a scrollable transcript player to video and audio files.",
   "main": "transcript-player.js",
   "scripts": {
